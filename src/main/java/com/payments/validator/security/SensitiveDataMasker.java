@@ -31,7 +31,7 @@ public class SensitiveDataMasker {
 
         int separatorIdx = track2.indexOf('=');
         if (separatorIdx == -1) separatorIdx = track2.indexOf('D');
-        if (separatorIdx > 6) {
+        if (separatorIdx >6) {
             String panPart = track2.substring(0, separatorIdx);
             String maskedPan = maskPan(panPart);
             return maskedPan + "=****************";
