@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic ISO 8583 Field Validator | Card Payment Simulator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0066ff',
+                            600: '#0052cc',
+                            700: '#003d99',
+                            900: '#0a192f',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-slate-800 bg-slate-950/80 sticky top-0 z-50 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg text-white tracking-tight flex items-center space-x-2">
+                        <span>ISO 8583 Mandatory Field Validator</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">Simulator Edition</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Dynamic Rules Engine • Visa / Mastercard / VTS Root-Cause Diagnostics</p>
+                </div>
+            </div>
+
+            <!-- Header Controls & Masking Indicator -->
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-emerald-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>PCI Masking: <b>Active</b></span>
+                </div>
+                <div class="text-xs text-slate-400 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-800">
+                    DB: <span class="text-amber-400 font-semibold">MySQL</span>
+                </div>
+                <a href="/swagger-ui.html" target="_blank" class="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition flex items-center space-x-1">
+                    <span>API Docs</span>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Navigation Tabs -->
+        <div class="flex border-b border-slate-800 space-x-2">
+            <button id="tab-single-btn" onclick="switchTab('single')" class="px-5 py-2.5 font-semibold text-sm rounded-t-lg bg-slate-800 text-blue-400 border-b-2 border-blue-500 flex items-center space-x-2 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <span>Single Message Validator</span>
+            </button>
+            <button id="tab-compare-btn" onclick="switchTab('compare')" class="px-5 py-2.5 font-medium text-sm rounded-t-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 flex items-center space-x-2 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                <span>Request / Response Correlator</span>
+            </button>
+            <button id="tab-guide-btn" onclick="switchTab('guide')" class="px-5 py-2.5 font-medium text-sm rounded-t-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 flex items-center space-x-2 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                <span>Rule Profiles & Diagnostics Guide</span>
+            </button>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 1: SINGLE MESSAGE VALIDATOR            -->
+        <!-- ========================================== -->
+        <div id="tab-single" class="space-y-6">
+
+            <!-- Ingestion & Configuration Card -->
+            <div class="bg-slate-950 rounded-2xl border border-slate-800 p-6 shadow-xl">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between pb-5 border-b border-slate-800/80 gap-4">
+                    <div>
+                        <h2 class="text-base font-bold text-white flex items-center space-x-2">
+                            <span>ISO 8583 Message Input</span>
+                            <span class="text-xs font-normal text-slate-400">(Supports Hex, ASCII, EBCDIC, BCD, or VTS Log Text)</span>
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Paste raw simulator log or network message buffer to extract fields and diagnose missing mandatory DEs.</p>
+                    </div>
+
+                    <!-- Preset Quick Loaders -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs text-slate-400 font-medium">Quick Samples:</span>
+                        <button onclick="loadSample('valid-visa-atm')" class="px-2.5 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-blue-300 rounded-lg border border-slate-700 transition">
+                            ✓ Valid Visa ATM (0100)
+                        </button>
+                        <button onclick="loadSample('missing-de55')" class="px-2.5 py-1.5 text-xs bg-red-950/40 hover:bg-red-900/50 text-red-300 rounded-lg border border-red-800/50 transition">
+                            ✗ Missing DE 55 Chip Data
+                        </button>
+                        <button onclick="loadSample('decline-55')" class="px-2.5 py-1.5 text-xs bg-amber-950/40 hover:bg-amber-900/50 text-amber-300 rounded-lg border border-amber-800/50 transition">
+                            ⚠ Simulator Decline (DE 39=55)
+                        </button>
+                        <button onclick="loadSample('vts-raw-dump')" class="px-2.5 py-1.5 text-xs bg-indigo-950/50 hover:bg-indigo-900/60 text-indigo-300 rounded-lg border border-indigo-700/50 transition font-semibold">
+                            ⎘ User VTS Dump (0110 Decline 05)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input Controls Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 py-4 text-xs">
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1.5">Network Profile</label>
+                        <select id="single-network" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500">
+                            <option value="AUTO">Auto-Detect Network</option>
+                            <option value="VISA">Visa (VIS / VSDC)</option>
+                            <option value="MASTERCARD">Mastercard (M/Chip)</option>
+                            <option value="COMMON">Common ISO 8583</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1.5">Input Format</label>
+                        <select id="single-format" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500">
+                            <option value="VTS_LOG">VTS Log / Formatted Text</option>
+                            <option value="HEX">Raw Hexadecimal</option>
+                            <option value="ASCII">Raw ASCII</option>
+                            <option value="BCD">BCD / Binary</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-medium mb-1.5">Scenario Override</label>
+                        <select id="single-scenario" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500">
+                            <option value="">None (Auto-Classify from DE 3/22)</option>
+                            <option value="ATM">ATM Cash Disbursement</option>
+                            <option value="POS">POS Chip Purchase</option>
+                            <option value="ECOMMERCE">E-Commerce Purchase</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center pt-6">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="single-strip-header" checked class="sr-only peer">
+                            <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                            <span class="ml-2.5 text-xs text-slate-300">Strip 16-byte Transport Header</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Textarea -->
+                <div>
+                    <textarea id="single-input" rows="8" placeholder="Paste ISO 8583 raw hex, ASCII, or VTS log format here..." class="w-full bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 custom-scroll"></textarea>
+                </div>
+
+                <!-- Action Toolbar -->
+                <div class="flex items-center justify-between mt-4">
+                    <button onclick="clearSingleInput()" class="text-xs text-slate-400 hover:text-slate-200 px-3 py-2 rounded-lg hover:bg-slate-900 transition">
+                        Clear Input
+                    </button>
+                    <div class="flex items-center space-x-3">
+                        <button onclick="executeParseOnly()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                            Parse Only
+                        </button>
+                        <button onclick="executeParseAndValidate()" id="btn-validate" class="px-5 py-2 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/25 transition flex items-center space-x-2">
+                            <span>⚡ Parse & Validate Message</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Section (Dynamic) -->
+            <div id="single-results" class="hidden space-y-6">
+
+                <!-- Diagnostic Summary Header Bar -->
+                <div id="results-banner" class="rounded-2xl border p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div class="space-y-1">
+                        <div class="flex items-center space-x-3">
+                            <span id="badge-status" class="px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide">
+                                PASS
+                            </span>
+                            <span id="badge-scenario" class="text-sm font-bold text-white">
+                                Visa VSDC ATM Cash Disbursement
+                            </span>
+                            <span id="badge-confidence" class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                                100% Confidence
+                            </span>
+                        </div>
+                        <p id="profile-stack-desc" class="text-xs text-slate-400">
+                            Applied Profile Stack: <span class="font-mono text-slate-300">BASE_ISO8583_v1.0 &gt; VISA_CORE_v2026.1 &gt; VISA_ATM_CASH_DISBURSEMENT_v1.2 &gt; VSDC_CHIP_PIN_PROFILE_v1.0</span>
+                        </p>
+                    </div>
+
+                    <!-- Metrics KPI Counter -->
+                    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
+                        <div class="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
+                            <span class="block text-xs text-slate-400">Parsed DEs</span>
+                            <span id="stat-total" class="text-base font-extrabold text-white">0</span>
+                        </div>
+                        <div class="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
+                            <span class="block text-xs text-emerald-400">Valid</span>
+                            <span id="stat-valid" class="text-base font-extrabold text-emerald-400">0</span>
+                        </div>
+                        <div class="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
+                            <span class="block text-xs text-red-400">Missing Mand.</span>
+                            <span id="stat-missing-mand" class="text-base font-extrabold text-red-400">0</span>
+                        </div>
+                        <div class="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
+                            <span class="block text-xs text-amber-400">Missing Cond.</span>
+                            <span id="stat-missing-cond" class="text-base font-extrabold text-amber-400">0</span>
+                        </div>
+                        <div class="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
+                            <span class="block text-xs text-purple-400">Prohibited</span>
+                            <span id="stat-prohibited" class="text-base font-extrabold text-purple-400">0</span>
+                        </div>
+                        <div class="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
+                            <span class="block text-xs text-blue-400">Warnings</span>
+                            <span id="stat-warnings" class="text-base font-extrabold text-blue-400">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PRIORITIZED ROOT CAUSES CARD -->
+                <div id="root-causes-card" class="bg-slate-950 rounded-2xl border border-red-900/40 p-6 shadow-xl space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center font-bold">
+                                🚨
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Prioritized Root-Cause Findings</h3>
+                                <p class="text-xs text-slate-400">Identified blockers ranked by payment network failure precedence.</p>
+                            </div>
+                        </div>
+                        <span id="root-causes-count" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                            1 Root Cause
+                        </span>
+                    </div>
+
+                    <!-- Findings Container -->
+                    <div id="root-causes-list" class="space-y-3">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- BUSINESS DECLINE NOTICE (If DE 39 != 00) -->
+                <div id="business-decline-card" class="hidden bg-slate-950 rounded-2xl border border-amber-900/40 p-6 shadow-xl space-y-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-lg">ℹ️</span>
+                        <h3 class="text-sm font-bold text-amber-300">Simulator Outcome Interpretation (DE 39 = <span id="de39-code"></span>)</h3>
+                    </div>
+                    <p id="de39-explanation" class="text-xs text-slate-300 leading-relaxed"></p>
+                </div>
+
+                <!-- COMPLETE MANDATORY MATRIX -->
+                <div class="bg-slate-950 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-sm font-bold text-white">Complete Scenario Mandatory Matrix</h3>
+                            <p class="text-xs text-slate-400">Evaluation of all data elements against current transaction rules.</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <input type="text" id="matrix-search" oninput="filterMatrixTable()" placeholder="Search DE / Tag / Name..." class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500">
+                            <select id="matrix-filter" onchange="filterMatrixTable()" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                                <option value="ALL">All Elements</option>
+                                <option value="VIOLATIONS">Violations Only</option>
+                                <option value="MANDATORY">Mandatory</option>
+                                <option value="CONDITIONAL">Conditional</option>
+                                <option value="PRESENT">Present</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-xl border border-slate-800 custom-scroll">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead class="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800">
+                                <tr>
+                                    <th class="py-3 px-3.5">Field / Tag</th>
+                                    <th class="py-3 px-3.5">Element Name</th>
+                                    <th class="py-3 px-3.5">Requirement</th>
+                                    <th class="py-3 px-3.5">Present?</th>
+                                    <th class="py-3 px-3.5">Valid?</th>
+                                    <th class="py-3 px-3.5">Actual Value (Masked)</th>
+                                    <th class="py-3 px-3.5">Expected</th>
+                                    <th class="py-3 px-3.5">Rule ID</th>
+                                    <th class="py-3 px-3.5">Diagnosis & Fix</th>
+                                </tr>
+                            </thead>
+                            <tbody id="matrix-tbody" class="divide-y divide-slate-800/60 font-mono text-[11px]">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- PARSED MESSAGE ELEMENTS & EMV TAG VIEWER -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Parsed ISO Fields -->
+                    <div class="bg-slate-950 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-3">
+                        <h3 class="text-sm font-bold text-white flex items-center justify-between">
+                            <span>Parsed ISO 8583 Data Elements</span>
+                            <span id="parsed-de-count" class="text-xs font-normal text-slate-400"></span>
+                        </h3>
+                        <div id="parsed-fields-list" class="space-y-2 max-h-96 overflow-y-auto custom-scroll pr-1">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- DE 55 EMV Tags Inspector -->
+                    <div class="bg-slate-950 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-3">
+                        <h3 class="text-sm font-bold text-white flex items-center justify-between">
+                            <span>DE 55 ICC BER-TLV Inspector</span>
+                            <span id="emv-tag-count" class="text-xs font-normal text-slate-400">0 Tags Parsed</span>
+                        </h3>
+                        <div id="emv-tags-list" class="space-y-2 max-h-96 overflow-y-auto custom-scroll pr-1">
+                            <p class="text-xs text-slate-500 italic">No DE 55 ICC data present in this message.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: REQUEST / RESPONSE CORRELATOR       -->
+        <!-- ========================================== -->
+        <div id="tab-compare" class="hidden space-y-6">
+            <div class="bg-slate-950 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-3">
+                    <div>
+                        <h2 class="text-base font-bold text-white">Correlated Request &amp; Response Comparison</h2>
+                        <p class="text-xs text-slate-400">Inspect side-by-side transaction correlation, STAN matching, and verify whether response omissions are legitimate due to declines.</p>
+                    </div>
+                    <button onclick="loadCompareSample()" class="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-blue-300 rounded-lg border border-slate-700 transition">
+                        ⎘ Load Sample Visa 0100/0110 Pair (Decline 55)
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Request Message (0100 / 0200)</label>
+                        <textarea id="compare-req-input" rows="8" placeholder="Paste Request ISO message or VTS log..." class="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 custom-scroll"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Response Message (0110 / 0210)</label>
+                        <textarea id="compare-resp-input" rows="8" placeholder="Paste Response ISO message or VTS log..." class="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 custom-scroll"></textarea>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button onclick="executeCompare()" class="px-6 py-2.5 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/25 transition">
+                        Compare &amp; Correlate Pair
+                    </button>
+                </div>
+            </div>
+
+            <!-- Compare Results -->
+            <div id="compare-results" class="hidden space-y-6">
+                <!-- Analysis Card -->
+                <div class="bg-slate-950 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+                            <span>Correlation &amp; Root-Cause Analysis</span>
+                        </h3>
+                        <div class="flex items-center space-x-3 text-xs font-mono">
+                            <span id="corr-stan" class="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300">STAN: -</span>
+                            <span id="corr-tid" class="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300">TID: -</span>
+                            <span id="corr-status-badge" class="px-2.5 py-1 rounded font-bold">MATCH</span>
+                        </div>
+                    </div>
+                    <div id="corr-analysis-text" class="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+                    </div>
+                </div>
+
+                <!-- Side-by-Side Comparison Table -->
+                <div class="bg-slate-950 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-4">
+                    <h3 class="text-sm font-bold text-white">Side-by-Side Element Comparison</h3>
+                    <div class="overflow-x-auto rounded-xl border border-slate-800 custom-scroll">
+                        <table class="w-full text-left text-xs text-slate-300 font-mono">
+                            <thead class="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800">
+                                <tr>
+                                    <th class="py-3 px-3.5">DE</th>
+                                    <th class="py-3 px-3.5">Data Element Name</th>
+                                    <th class="py-3 px-3.5">Request 0100</th>
+                                    <th class="py-3 px-3.5">Response 0110</th>
+                                    <th class="py-3 px-3.5">Correlation</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compare-tbody" class="divide-y divide-slate-800/60 text-[11px]">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: RULE PROFILES & GUIDE               -->
+        <!-- ========================================== -->
+        <div id="tab-guide" class="hidden space-y-6">
+            <div class="bg-slate-950 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-4">
+                <h2 class="text-base font-bold text-white">Configurable Rule Hierarchy &amp; Profile Precedence</h2>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    The validator computes applicable rules using an 8-level inheritance tree. General rules are overridden by specific channel or test-case overrides:
+                </p>
+                <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-800 font-mono text-xs text-slate-300 space-y-1">
+                    <div class="text-blue-400 font-semibold">Level 1: BASE_ISO8583_v1.0 (Universal framing, MTI, STAN DE 11, Amount DE 4)</div>
+                    <div class="pl-4 text-indigo-400 font-semibold">↳ Level 2: NETWORK_CORE (Visa VIS 1.6 / Mastercard M/Chip Core)</div>
+                    <div class="pl-8 text-cyan-400 font-semibold">↳ Level 3: REGIONAL_PROFILE (e.g. US, Europe, Philippines Mandates)</div>
+                    <div class="pl-12 text-teal-400 font-semibold">↳ Level 4: TRANSACTION_PROFILE (Cash Withdrawal DE 3=01 vs Purchase DE 3=00)</div>
+                    <div class="pl-16 text-emerald-400 font-semibold">↳ Level 5: CHANNEL / ENTRY_MODE (ATM DE 18=6011, Chip DE 22=0510, E-Com DE 22=10)</div>
+                    <div class="pl-20 text-amber-400 font-semibold">↳ Level 6: TERMINAL / CARD_PRODUCT (VSDC Chip & PIN vs MSD)</div>
+                    <div class="pl-24 text-rose-400 font-semibold">↳ Level 7: SIMULATOR_TEST_PROFILE (Visa VTS Case 5.2 / 13.2 Rules)</div>
+                    <div class="pl-28 text-purple-400 font-semibold">↳ Level 8: CASE-SPECIFIC OVERRIDE (Auditable per-test overrides)</div>
+                </div>
+
+                <h3 class="text-sm font-bold text-white pt-4">Simulator Response Codes vs. Structural Errors</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-800 space-y-1">
+                        <span class="font-bold text-amber-400 font-mono">DE 39 = 05 ("Do Not Honor")</span>
+                        <p class="text-slate-400">Generic cardholder or issuer security decline. Check card balance or simulator account status. Not a parser defect.</p>
+                    </div>
+                    <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-800 space-y-1">
+                        <span class="font-bold text-amber-400 font-mono">DE 39 = 55 ("Incorrect PIN")</span>
+                        <p class="text-slate-400">PIN verification failure in DE 52. VTS may flag DE 38 as "Expected, But Not Received" because approval code is legitimately absent on decline.</p>
+                    </div>
+                    <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-800 space-y-1">
+                        <span class="font-bold text-amber-400 font-mono">DE 39 = 82 ("CAM / Cryptogram Fail")</span>
+                        <p class="text-slate-400">ARQC verification failure in DE 55 Tag 9F26. Inspect simulator UDK/MDK keys and ATC (Tag 9F36) counters.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- UI State & Application Script -->
+    <script>
+        const API_BASE = '/api/v1';
+
+        // Sample Data Definitions
+        const SAMPLES = {
+            'valid-visa-atm': `MTI: 0100\nBitmap: F238448108E18000\nF2: 4413600000002899\nF3: 010000\nF4: 000000010000\nF7: 0928120000\nF11: 123456\nF18: 6011\nF22: 0510\nF25: 02\nF41: ATM00001\nF42: CARD ACCEPTOR 01\nF52: 1A2B3C4D5E6F7081\nF55: 9F260811223344556677889F3602001595050000000000\nF55.9F26: 1122334455667788\nF55.9F36: 0015\nF55.95: 0000000000\nF60: 0100000000`,
+
+            'missing-de55': `MTI: 0100\nBitmap: F238448108E18000\nF2: 4413600000002899\nF3: 010000\nF4: 000000010000\nF7: 0928120000\nF11: 123456\nF18: 6011\nF22: 0510\nF25: 02\nF41: ATM00001\nF42: CARD ACCEPTOR 01\nF52: 1A2B3C4D5E6F7081\nF60: 0100000000`,
+
+            'decline-55': `MTI: 0110\nBitmap: F238448108E18000\nF2: 4413600000002899\nF3: 010000\nF4: 000000010000\nF7: 0928120000\nF11: 123456\nF39: 55\nF41: ATM00001\nExpected, But Not Received: F38, F55.91, F62.23`,
+
+            'vts-raw-dump': `--------------------------------------------------------------------------------
+VTS Exported Raw Message: \t
+
+Date - Message Printed: \t09/18/2026
+Time - Message Printed: \t18:13:31
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+Raw Hex Dump
+Displacement   00+        04+        08+        0C+      
+--------------------------------------------------------------------------------
+0000           16010200   7D000000   00000000   00000000 
+0010           00000000   00000110   72202281   0AD08002 
+0020           10441360   00000030   87000000   00000000 
+0030           13000917   12121100   02240608   0001000B 
+0040           01234567   8901F6F2   F6F0F1F2   F0F0F0F2 
+0050           F2F4F0F5   F74BF240   40404040   C3C1D9C4 
+0060           40C1C3C3   C5D7E3D6   D9404009   40404040 
+0070           40404040   F2060805   80000000   02       
+================================================================================`
+        };
+
+        let currentValidationReport = null;
+
+        function switchTab(tab) {
+            ['single', 'compare', 'guide'].forEach(t => {
+                const el = document.getElementById('tab-' + t);
+                const btn = document.getElementById('tab-' + t + '-btn');
+                if (t === tab) {
+                    el.classList.remove('hidden');
+                    btn.classList.add('bg-slate-800', 'text-blue-400', 'border-b-2', 'border-blue-500');
+                    btn.classList.remove('text-slate-400');
+                } else {
+                    el.classList.add('hidden');
+                    btn.classList.remove('bg-slate-800', 'text-blue-400', 'border-b-2', 'border-blue-500');
+                    btn.classList.add('text-slate-400');
+                }
+            });
+        }
+
+        function loadSample(key) {
+            document.getElementById('single-input').value = SAMPLES[key] || '';
+            document.getElementById('single-format').value = 'VTS_LOG';
+        }
+
+        function clearSingleInput() {
+            document.getElementById('single-input').value = '';
+            document.getElementById('single-results').classList.add('hidden');
+        }
+
+        function loadCompareSample() {
+            document.getElementById('compare-req-input').value = SAMPLES['valid-visa-atm'];
+            document.getElementById('compare-resp-input').value = SAMPLES['decline-55'];
+        }
+
+        async function executeParseAndValidate() {
+            const raw = document.getElementById('single-input').value.trim();
+            if (!raw) {
+                alert('Please paste an ISO 8583 message or VTS log.');
+                return;
+            }
+
+            const btn = document.getElementById('btn-validate');
+            btn.innerHTML = `<span>Validating...</span>`;
+            btn.disabled = true;
+
+            const payload = {
+                rawMessage: raw,
+                inputFormat: document.getElementById('single-format').value,
+                strip16ByteHeader: document.getElementById('single-strip-header').checked,
+                overrides: {
+                    network: document.getElementById('single-network').value,
+                    channel: document.getElementById('single-scenario').value || null
+                }
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/parse-and-validate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                const report = await res.json();
+                currentValidationReport = report;
+                renderSingleResults(report);
+            } catch (err) {
+                alert('Validation error: ' + err.message);
+            } finally {
+                btn.innerHTML = `<span>⚡ Parse & Validate Message</span>`;
+                btn.disabled = false;
+            }
+        }
+
+        async function executeParseOnly() {
+            const raw = document.getElementById('single-input').value.trim();
+            if (!raw) {
+                alert('Please paste an ISO 8583 message.');
+                return;
+            }
+
+            const payload = {
+                rawMessage: raw,
+                inputFormat: document.getElementById('single-format').value,
+                strip16ByteHeader: document.getElementById('single-strip-header').checked
+            };
+
+            try {
+                const res = await fetch(`${API_BASE}/parse`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                const parsed = await res.json();
+                alert(`Successfully parsed ${Object.keys(parsed.fields || {}).length} data elements. MTI: ${parsed.mti}`);
+            } catch (err) {
+                alert('Parse error: ' + err.message);
+            }
+        }
+
+        function renderSingleResults(report) {
+            const resultsSection = document.getElementById('single-results');
+            resultsSection.classList.remove('hidden');
+
+            // 1. Banner & Badges
+            const statusBadge = document.getElementById('badge-status');
+            const banner = document.getElementById('results-banner');
+            const scenarioBadge = document.getElementById('badge-scenario');
+            const confBadge = document.getElementById('badge-confidence');
+
+            statusBadge.innerText = report.status;
+            if (report.status === 'PASS') {
+                statusBadge.className = 'px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                banner.className = 'rounded-2xl border border-emerald-800/40 bg-emerald-950/20 p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4';
+            } else if (report.status === 'PASS_WITH_WARNINGS') {
+                statusBadge.className = 'px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide bg-blue-500/20 text-blue-400 border border-blue-500/30';
+                banner.className = 'rounded-2xl border border-blue-800/40 bg-blue-950/20 p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4';
+            } else {
+                statusBadge.className = 'px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide bg-red-500/20 text-red-400 border border-red-500/30';
+                banner.className = 'rounded-2xl border border-red-800/40 bg-red-950/20 p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4';
+            }
+
+            scenarioBadge.innerText = `${report.scenario?.network || ''} ${report.scenario?.channel || ''} ${report.scenario?.transactionFamily || ''}`.trim() || 'Payment Scenario';
+            confBadge.innerText = `${Math.round((report.scenario?.confidenceScore || 1.0) * 100)}% Confidence`;
+
+            if (report.scenario?.appliedRuleStack) {
+                document.getElementById('profile-stack-desc').innerHTML = `Applied Profile Stack: <span class="font-mono text-slate-300">${report.scenario.appliedRuleStack.join(' &gt; ')}</span>`;
+            }
+
+            // 2. Counts
+            document.getElementById('stat-total').innerText = report.totalParsedFields || 0;
+            document.getElementById('stat-valid').innerText = report.presentAndValidCount || 0;
+            document.getElementById('stat-missing-mand').innerText = report.missingMandatoryCount || 0;
+            document.getElementById('stat-missing-cond').innerText = report.missingConditionalCount || 0;
+            document.getElementById('stat-prohibited').innerText = report.prohibitedFieldsCount || 0;
+            document.getElementById('stat-warnings').innerText = (report.warnings || []).length;
+
+            // 3. Root Causes
+            const rcCard = document.getElementById('root-causes-card');
+            const rcList = document.getElementById('root-causes-list');
+            const rcCount = document.getElementById('root-causes-count');
+            rcList.innerHTML = '';
+
+            const causes = report.rootCauses || [];
+            rcCount.innerText = `${causes.length} Root Cause${causes.length === 1 ? '' : 's'}`;
+
+            if (causes.length === 0) {
+                rcCard.classList.add('border-emerald-900/40');
+                rcCard.classList.remove('border-red-900/40');
+                rcList.innerHTML = `
+                    <div class="p-4 rounded-xl bg-emerald-950/30 border border-emerald-800/50 text-emerald-300 text-xs flex items-center space-x-2">
+                        <span class="text-base">✓</span>
+                        <span>Zero blocking root-cause errors detected! All mandatory and conditional rules are satisfied for this scenario.</span>
+                    </div>
+                `;
+            } else {
+                rcCard.classList.remove('border-emerald-900/40');
+                rcCard.classList.add('border-red-900/40');
+                causes.forEach(cause => {
+                    const dependentHtml = (cause.dependentFindings && cause.dependentFindings.length > 0) ? `
+                        <div class="mt-2 pt-2 border-t border-red-900/40 space-y-1">
+                            <span class="text-[11px] font-semibold text-red-300 block">↳ Dependent Missing Tags (Blocked by ${cause.fieldPath} absence):</span>
+                            ${cause.dependentFindings.map(d => `
+                                <div class="text-[11px] text-slate-300 flex items-center space-x-2 pl-3">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                                    <span class="font-mono text-red-300 font-bold">${d.fieldPath}</span>
+                                    <span>(${d.fieldName}) - ${d.reason}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '';
+
+                    const div = document.createElement('div');
+                    div.className = 'p-4 rounded-xl bg-red-950/30 border border-red-800/60 text-xs space-y-2';
+                    div.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-mono text-sm font-bold text-red-400">${cause.fieldPath}</span>
+                                <span class="text-slate-300 font-semibold">- ${cause.fieldName}</span>
+                            </div>
+                            <span class="text-[10px] px-2 py-0.5 rounded bg-red-900/60 text-red-300 font-mono">${cause.ruleId || 'RULE-BLOCKER'}</span>
+                        </div>
+                        <div class="text-slate-300 leading-relaxed">${cause.reason}</div>
+                        ${cause.conditionExpression ? `<div class="text-[11px] font-mono text-slate-400">Condition: <span class="text-blue-300">${cause.conditionExpression}</span></div>` : ''}
+                        <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-emerald-300 text-[11px] flex items-center space-x-2">
+                            <span>💡 <b>Suggested Fix:</b> ${cause.suggestedFix}</span>
+                        </div>
+                        ${dependentHtml}
+                    `;
+                    rcList.appendChild(div);
+                });
+            }
+
+            // 4. Business Decline Card
+            const decCard = document.getElementById('business-decline-card');
+            if (report.businessDeclineCode) {
+                decCard.classList.remove('hidden');
+                document.getElementById('de39-code').innerText = report.businessDeclineCode;
+                document.getElementById('de39-explanation').innerHTML = `
+                    Simulator returned decline code <b>${report.businessDeclineCode}</b>: <em>${report.businessDeclineDescription}</em>.<br>
+                    ${report.isPureBusinessDecline ?
+                        '<span class="text-emerald-400 font-semibold">✓ Note: Request message is structurally valid. This response is an account/PIN decline generated by the simulator, not an ISO framing failure.</span>' :
+                        '<span class="text-amber-400 font-semibold">⚠ Warning: Message contains structural rule failures which likely provoked this simulator decline.</span>'
+                    }
+                `;
+            } else {
+                decCard.classList.add('hidden');
+            }
+
+            // 5. Render Mandatory Matrix Table
+            renderMatrixTable(report.completeMatrix || []);
+
+            // 6. Render Parsed Fields & EMV Tags
+            renderParsedFieldsAndTags(report.parsedMessage);
+        }
+
+        function renderMatrixTable(matrix) {
+            const tbody = document.getElementById('matrix-tbody');
+            tbody.innerHTML = '';
+
+            matrix.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/40 transition';
+                tr.setAttribute('data-field', row.fieldPath);
+                tr.setAttribute('data-name', row.fieldName);
+                tr.setAttribute('data-req', row.requirementLevel);
+                tr.setAttribute('data-valid', row.valid ? 'true' : 'false');
+                tr.setAttribute('data-present', row.present ? 'true' : 'false');
+
+                const statusColor = row.valid ? 'text-emerald-400' : 'text-red-400 font-bold';
+                const presentBadge = row.present ?
+                    '<span class="text-emerald-400 font-semibold">Yes</span>' :
+                    '<span class="text-slate-500">No</span>';
+
+                tr.innerHTML = `
+                    <td class="py-2.5 px-3.5 font-bold text-slate-200">${row.fieldPath}</td>
+                    <td class="py-2.5 px-3.5 text-slate-300 font-sans">${row.fieldName}</td>
+                    <td class="py-2.5 px-3.5"><span class="px-2 py-0.5 rounded text-[10px] bg-slate-900 border border-slate-800 ${row.requirementLevel === 'MANDATORY' ? 'text-blue-300 font-bold' : 'text-slate-400'}">${row.requirementLevel}</span></td>
+                    <td class="py-2.5 px-3.5">${presentBadge}</td>
+                    <td class="py-2.5 px-3.5 ${statusColor}">${row.valid ? '✓ Valid' : '✗ Failed'}</td>
+                    <td class="py-2.5 px-3.5 text-slate-300">${row.actualValueMasked || '<span class="text-slate-600">[ABSENT]</span>'}</td>
+                    <td class="py-2.5 px-3.5 text-slate-400">${row.expectedValueOrFormat || '-'}</td>
+                    <td class="py-2.5 px-3.5 text-slate-400 font-mono text-[10px]">${row.ruleId || '-'}</td>
+                    <td class="py-2.5 px-3.5 text-slate-300 font-sans">${row.reason}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filterMatrixTable() {
+            const query = (document.getElementById('matrix-search').value || '').toLowerCase();
+            const filter = document.getElementById('matrix-filter').value;
+            const rows = document.querySelectorAll('#matrix-tbody tr');
+
+            rows.forEach(r => {
+                const field = (r.getAttribute('data-field') || '').toLowerCase();
+                const name = (r.getAttribute('data-name') || '').toLowerCase();
+                const req = r.getAttribute('data-req');
+                const valid = r.getAttribute('data-valid') === 'true';
+                const present = r.getAttribute('data-present') === 'true';
+
+                let matchesFilter = true;
+                if (filter === 'VIOLATIONS') matchesFilter = !valid;
+                else if (filter === 'MANDATORY') matchesFilter = (req === 'MANDATORY');
+                else if (filter === 'CONDITIONAL') matchesFilter = (req === 'CONDITIONAL');
+                else if (filter === 'PRESENT') matchesFilter = present;
+
+                const matchesQuery = field.includes(query) || name.includes(query);
+                r.style.display = (matchesFilter && matchesQuery) ? '' : 'none';
+            });
+        }
+
+        function renderParsedFieldsAndTags(msg) {
+            if (!msg) return;
+
+            // Fields List
+            const fList = document.getElementById('parsed-fields-list');
+            fList.innerHTML = '';
+            const fields = msg.fields || {};
+            const deKeys = Object.keys(fields).map(Number).sort((a,b) => a - b);
+            document.getElementById('parsed-de-count').innerText = `${deKeys.length} Fields Extracted`;
+
+            deKeys.forEach(k => {
+                const f = fields[k];
+                const div = document.createElement('div');
+                div.className = 'p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono flex items-center justify-between';
+                div.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <span class="w-12 font-bold text-blue-400">DE ${f.fieldNumber}</span>
+                        <span class="text-slate-300 font-sans">${f.name}</span>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span class="text-slate-400 text-[11px]">${f.maskedValue || f.decodedValue}</span>
+                        <span class="text-[10px] text-slate-500">[${f.startOffset}-${f.endOffset}b]</span>
+                    </div>
+                `;
+                fList.appendChild(div);
+            });
+
+            // EMV Tags List (DE 55)
+            const emvContainer = document.getElementById('emv-tags-list');
+            emvContainer.innerHTML = '';
+            const de55 = fields[55];
+
+            if (de55 && de55.emvTags && de55.emvTags.length > 0) {
+                document.getElementById('emv-tag-count').innerText = `${de55.emvTags.length} EMV Tags`;
+                de55.emvTags.forEach(t => {
+                    const div = document.createElement('div');
+                    div.className = 'p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono space-y-1';
+                    div.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-bold text-indigo-400">Tag ${t.tag}</span>
+                                <span class="text-slate-300 font-sans">${t.name}</span>
+                            </div>
+                            <span class="text-[10px] text-slate-400 font-mono">Len: ${t.length}B</span>
+                        </div>
+                        <div class="text-[11px] text-slate-400 break-all bg-slate-950/60 p-1.5 rounded border border-slate-800/60">
+                            ${t.maskedHex || t.rawHex}
+                        </div>
+                    `;
+                    emvContainer.appendChild(div);
+                });
+            } else {
+                document.getElementById('emv-tag-count').innerText = '0 Tags';
+                emvContainer.innerHTML = `<p class="text-xs text-slate-500 italic">No DE 55 ICC data present in this message.</p>`;
+            }
+        }
+
+        async function executeCompare() {
+            const rawReq = document.getElementById('compare-req-input').value.trim();
+            const rawResp = document.getElementById('compare-resp-input').value.trim();
+
+            if (!rawReq || !rawResp) {
+                alert('Please paste both a Request and a Response message.');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/compare-request-response`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        rawRequest: rawReq,
+                        rawResponse: rawResp,
+                        strip16ByteHeader: true
+                    })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                const data = await res.json();
+                renderCompareResults(data);
+            } catch (err) {
+                alert('Compare error: ' + err.message);
+            }
+        }
+
+        function renderCompareResults(data) {
+            document.getElementById('compare-results').classList.remove('hidden');
+
+            document.getElementById('corr-stan').innerText = `STAN: ${data.correlationStan || 'N/A'}`;
+            document.getElementById('corr-tid').innerText = `TID: ${data.correlationTerminalId || 'N/A'}`;
+
+            const badge = document.getElementById('corr-status-badge');
+            if (data.correlated) {
+                badge.innerText = 'CORRELATED (MATCH)';
+                badge.className = 'px-2.5 py-1 rounded font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+            } else {
+                badge.innerText = 'UNLINKED (MISMATCH)';
+                badge.className = 'px-2.5 py-1 rounded font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30';
+            }
+
+            document.getElementById('corr-analysis-text').innerText = data.overallAnalysis || 'Correlation completed.';
+
+            // Render side by side rows
+            const tbody = document.getElementById('compare-tbody');
+            tbody.innerHTML = '';
+
+            const reqFields = data.requestReport?.parsedMessage?.fields || {};
+            const respFields = data.responseReport?.parsedMessage?.fields || {};
+
+            const allDes = Array.from(new Set([...Object.keys(reqFields), ...Object.keys(respFields)])).map(Number).sort((a,b) => a - b);
+
+            allDes.forEach(de => {
+                const rf = reqFields[de];
+                const sf = respFields[de];
+
+                const reqVal = rf ? rf.maskedValue : '<span class="text-slate-600">[ABSENT]</span>';
+                const respVal = sf ? sf.maskedValue : '<span class="text-slate-600">[ABSENT]</span>';
+                const name = (rf ? rf.name : (sf ? sf.name : `Data Element ${de}`));
+
+                const isMatch = (rf && sf && rf.decodedValue === sf.decodedValue);
+                const matchIcon = isMatch ? '<span class="text-emerald-400">✓ MATCH</span>' : '<span class="text-slate-500">-</span>';
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/40 transition';
+                tr.innerHTML = `
+                    <td class="py-2 px-3.5 font-bold text-blue-400">DE ${de}</td>
+                    <td class="py-2 px-3.5 text-slate-300 font-sans">${name}</td>
+                    <td class="py-2 px-3.5 text-slate-300">${reqVal}</td>
+                    <td class="py-2 px-3.5 text-slate-300">${respVal}</td>
+                    <td class="py-2 px-3.5 text-xs">${matchIcon}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>

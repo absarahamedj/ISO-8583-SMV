@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: dynamic-iso8583-validator
+  datasource:
+    url: jdbc:mysql://localhost:3306/iso_validator
+    username: root
+    password: root
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+validator:
+  masking:
+    enabled: true
+    pan-visible-leading: 6
+    pan-visible-trailing: 4
+  rules:
+    active-profile: VISA_VSDC_ATM_CASH_DISBURSEMENT
+    version: 2026.1.0
